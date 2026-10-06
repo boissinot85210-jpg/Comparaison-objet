@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Impactrans — Évaluation qualitative des transferts d'impacts</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root{--navy:#12233d;--navy2:#1c3660;--paper:#f5f6f8;--ink:#1c2530;--muted:#5b6774;--line:#dfe3e8;--green:#2e7d4f;--red:#b3402c;--amber:#c8862b;--grey:#8a93a0}
+*{box-sizing:border-box}body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--paper);color:var(--ink)}
+#nav{position:fixed;top:0;left:0;bottom:0;width:230px;background:var(--navy);overflow-y:auto;padding:18px 0}
+#nav .brand{padding:0 18px 14px;border-bottom:1px solid #2a4066;margin-bottom:8px;color:#fff}#nav .brand span{display:block;font-size:11px;color:#9fb0c6}
+#nav a{display:block;padding:7px 18px;color:#c3cede;text-decoration:none;font-size:14px}#nav a.sl{padding-left:30px;font-size:13px;color:#9fb0c6}
+#nav a:hover,#nav a.on{background:var(--navy2);color:#fff}#nav a.on{border-left:3px solid #5c9df0}
+#nav .grp{margin-top:10px;padding:4px 18px;font-size:11px;text-transform:uppercase;color:#6f83a0}
+#content{margin-left:230px;padding:26px 32px;max-width:1120px}
+h1{font-size:23px;margin:0 0 4px}h2{font-size:18px;margin:24px 0 8px;color:var(--navy)}h3{margin:0 0 8px;font-size:14px}
+.lead{color:var(--muted);font-size:14px;margin:0 0 16px}.small{font-size:12px;color:var(--muted)}
+.card,.chartbox{background:#fff;border:1px solid var(--line);border-radius:6px;padding:14px 18px;margin-bottom:14px}
+.notice{background:#eef3fb;border-left:3px solid var(--navy2);padding:10px 14px;font-size:13.5px;border-radius:0 4px 4px 0;margin-bottom:14px}
+.warn{background:#fbf3e6;border-left:3px solid var(--amber);padding:8px 14px;font-size:13px;border-radius:0 4px 4px 0;margin:8px 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.cb{position:relative;height:250px}
+input[type=text],textarea,select{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:4px;font:13px inherit}textarea{min-height:50px}
+button{background:var(--navy);color:#fff;border:0;padding:7px 12px;border-radius:4px;cursor:pointer;font-size:13px}
+button.g{background:#fff;color:var(--navy);border:1px solid var(--line)}button.d{background:#fff;color:var(--red);border:1px solid var(--red)}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{border:1px solid var(--line);padding:5px 7px;text-align:left;vertical-align:top}th{background:#eef1f5}
+.tag{font-size:11px;padding:2px 8px;border-radius:10px;background:#eef1f5;color:var(--muted);margin-left:5px}.tag.env{background:#e4f1e8;color:var(--green)}.tag.soc{background:#e6ecf8;color:#2a4a8c}
+.mrow{display:grid;grid-template-columns:1.3fr 1fr 1fr 50px 1.2fr;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.mh{font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:600}
+.scale{display:flex;gap:6px;align-items:center}.scale input{flex:1}.val{width:26px;text-align:center;background:var(--navy);color:#fff;border-radius:4px;font-size:12px;padding:2px 0}
+.pos{color:var(--red);font-weight:600}.neg{color:var(--green);font-weight:600}.neu{color:var(--grey)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;align-items:center}.bar input{width:220px}
+.sum{padding:10px 14px;background:#eef1f5;border-radius:6px;font-size:14px;margin-top:10px}
+@media(max-width:800px){#nav{position:static;width:auto}#content{margin:0;padding:16px}.grid2{grid-template-columns:1fr}.mrow{grid-template-columns:1fr}}
+@media print{#nav,button{display:none}#content{margin:0}}
+</style></head><body><nav id="nav"></nav><div id="content"></div>
+<script>
+const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+/* Les CRITÈRES = types d'impact (« quoi »). Les PHASES = moments du cycle de vie (« quand »).
+   Transport, infrastructures, matériaux… sont des sources d'impact : ils se lisent dans les phases. */
+const PH=["extraction","fabrication","transport","construction","exploitation","finvie"];
+const cl=(s,t,n)=>{const o={};PH.forEach((p,i)=>o[p]={s:s[i],t:t[i],note:(n&&n[p])||""});return o};
+const DEF_PHASES=[
+{id:"extraction",name:"Extraction / matières premières",desc:"Extraction et transformation initiale des matières (métaux, composites, matériaux de construction)."},
+{id:"fabrication",name:"Fabrication",desc:"Production, usinage et assemblage des composants avant mise en service."},
+{id:"transport",name:"Transport",desc:"Acheminement des matériaux, composants, équipements et charges utiles."},
+{id:"construction",name:"Construction / infrastructures",desc:"Bâtiments, routes d'accès, lignes THT, aménagement du site."},
+{id:"exploitation",name:"Utilisation / exploitation",desc:"Fonctionnement courant en service normal (lancements, maintenance)."},
+{id:"finvie",name:"Fin de vie",desc:"Démantèlement, recyclage, remise en état du site."}];
+const DEF_CRIT=[
+{id:"carbone",name:"Carbone / gaz à effet de serre",type:"env",polarity:"impact",enabled:true,desc:"Émissions de GES sur l'ensemble du cycle de vie.",sub:["CO2 de combustion","Électricité consommée (mix)","Béton, acier","Perte de puits de carbone (défrichage)","Carburant résiduel pour l'orbite"],confiance:"Moyen",
+ justification:"Exemple pédagogique — gain en exploitation (pas de combustion basse altitude), mais charge déplacée vers la construction.",
+ cells:cl([6,6,5,8,3,4],[4,5,5,3,9,3],{construction:"Béton, acier, terrassement, lignes THT",exploitation:"Pas de combustion en basse altitude"})},
+{id:"ressources",name:"Ressources et matériaux",type:"env",polarity:"impact",enabled:true,desc:"Besoin en matières premières, rareté, excavation.",sub:["Quantité de matériaux","Excavation","Rareté","Disponibilité"],confiance:"Faible",justification:"Exemple pédagogique — grande structure résistante aux contraintes mécaniques.",cells:cl([7,6,3,8,3,4],[5,6,3,3,6,3])},
+{id:"energie",name:"Consommation d'énergie",type:"env",polarity:"impact",enabled:true,desc:"Énergie de fabrication et de fonctionnement.",sub:["Énergie de fabrication","Consommation électrique","Besoin des infrastructures"],confiance:"Moyen",justification:"Exemple pédagogique — centrifugeuse très gourmande en électricité.",cells:cl([5,6,3,5,8,3],[4,5,3,3,9,2])},
+{id:"pollution",name:"Pollution et nuisances",type:"env",polarity:"impact",enabled:true,desc:"Air, eau, sols, bruit.",sub:["Émissions atmosphériques","Pollution de l'eau","Pollution des sols","Bruit","Trafic"],confiance:"Moyen",justification:"Exemple pédagogique — moins de combustion, mais bruit et chantier.",cells:cl([5,5,4,7,5,4],[4,5,3,3,8,3])},
+{id:"biodiv",name:"Biodiversité et sols",type:"env",polarity:"impact",enabled:true,desc:"Défrichage, artificialisation, fragmentation des milieux.",sub:["Défrichage","Artificialisation","Fragmentation des habitats","Espèces locales"],confiance:"Faible",justification:"Exemple pédagogique — hêtraie d'Iraty, emprise du site et des accès.",cells:cl([6,2,3,9,5,3],[4,2,2,3,5,2])},
+{id:"emploi",name:"Emploi et économie locale",type:"soc",polarity:"benefit",enabled:true,desc:"Bénéfice : emplois directs/indirects, sous-traitance. 10 = bénéfice très fort.",sub:["Emplois directs","Emplois indirects","Sous-traitance","Activité locale"],confiance:"Faible",justification:"Exemple pédagogique — environ 10 000 emplois annoncés.",cells:cl([2,4,3,8,7,2],[1,3,2,3,5,1])},
+{id:"tensions",name:"Acceptabilité sociale / conflits",type:"soc",polarity:"impact",enabled:true,desc:"Tensions, oppositions, perte de confiance locale.",sub:["Mobilisations associatives","Débats d'élus","Usage de l'espace naturel"],confiance:"Faible",justification:"Exemple pédagogique — opposition Zibi!, Attac, XR (cf. Notre-Dame-des-Landes).",cells:cl([3,2,4,9,6,5],[2,2,3,2,4,2])},
+{id:"cadre",name:"Cadre de vie et logement",type:"soc",polarity:"impact",enabled:true,desc:"Pression sur le territoire : logement, trafic, paysage.",sub:["Logements à construire","Routes 2x2 voies","Paysage","Pression foncière"],confiance:"Faible",justification:"Exemple pédagogique — 100 km de routes, logements pour ~10 000 emplois.",cells:cl([1,1,5,8,6,2],[1,1,3,2,3,1])}];
+const DEF=()=>({objStudied:"SpinLaunch",objWitness:"Lanceur spatial conventionnel",criteria:JSON.parse(JSON.stringify(DEF_CRIT)),phases:JSON.parse(JSON.stringify(DEF_PHASES)),
+ critTransfers:[{from:"carbone",to:"biodiv",note:"Exemple pédagogique — gain de CO2 en exploitation, mais défrichage et artificialisation pour le site."}],
+ phaseTransfers:[{from:"exploitation",to:"construction",critere:"carbone",note:"Exemple pédagogique — l'impact quitte le lancement (combustion) pour la construction des infrastructures."}]});
+const KEY="impactrans_data_v2";let S=load();
+function load(){try{const r=localStorage.getItem(KEY);if(r)return JSON.parse(r)}catch(e){}return DEF()}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+const crit=id=>S.criteria.find(c=>c.id===id),phase=id=>S.phases.find(p=>p.id===id),act=()=>S.criteria.filter(c=>c.enabled);
+const cn=id=>crit(id)?esc(crit(id).name):esc(id),pn=id=>phase(id)?esc(phase(id).name):esc(id);
+const cell=(c,pid)=>{c.cells=c.cells||{};return c.cells[pid]||(c.cells[pid]={s:5,t:5,note:""})};
+const sg=c=>c.polarity==="benefit"?-1:1;                       /* charge : + = pire que le témoin */
+const charge=(c,pid)=>{const k=cell(c,pid);return sg(c)*(k.s-k.t)};
+const mean=(c,f)=>S.phases.length?S.phases.reduce((a,p)=>a+cell(c,p.id)[f],0)/S.phases.length:0;
+const r1=x=>Math.round(x*10)/10,fmt=x=>(x>0?"+":"")+r1(x);
+const cls=d=>d>0.5?"pos":d<-0.5?"neg":"neu";
+function status(c){const d=sg(c)*(mean(c,"s")-mean(c,"t"));return d>0.5?"worse":d<-0.5?"better":"same"}
+function phMean(pid,f){const l=act().filter(c=>c.polarity==="impact");return l.length?l.reduce((a,c)=>a+cell(c,pid)[f],0)/l.length:0}
+/* ---------- transferts détectés automatiquement ---------- */
+function phaseHints(c){const g=S.phases.filter(p=>charge(c,p.id)<=-2),r=S.phases.filter(p=>charge(c,p.id)>=2);return{g,r}}
+function cumulWarn(c){const sS=S.phases.reduce((a,p)=>a+cell(c,p.id).s,0),sT=S.phases.reduce((a,p)=>a+cell(c,p.id).t,0);
+ const mx=Math.max(0,...S.phases.map(p=>Math.abs(charge(c,p.id))));
+ return Math.abs(sS-sT)<=1&&mx>=2?`Cumul quasi identique (Σ ${S.objStudied} = ${sS}, Σ ${S.objWitness} = ${sT}) mais répartition différente : transfert entre phases probable.`:""}
+/* ---------- navigation ---------- */
+function nav(){let h=`<div class="brand"><b>IMPACTRANS</b><span>Transferts d'impacts — qualitatif</span></div>`;const a=(l,t,s)=>`<a href="${l}" class="${s?"sl ":""}${(location.hash||"#/home")===l?"on":""}">${t}</a>`;
+ h+=a("#/home","Accueil")+`<div class="grp">Critères (types d'impact)</div>`+act().map(c=>a("#/crit/"+c.id,esc(c.name),1)).join("")+
+ `<div class="grp">Cycle de vie</div>`+a("#/phases","Phases et transferts")+`<div class="grp">Analyse</div>`+a("#/dashboard","Tableau de bord")+`<div class="grp">Configuration</div>`+a("#/params","Critères")+a("#/objets","Objets comparés");
+ document.getElementById("nav").innerHTML=h}
+/* ---------- accueil / objets ---------- */
+function home(){return`<h1>Impactrans</h1><p class="lead">Évaluation qualitative des transferts d'impacts</p>
+<div class="notice">Outil qualitatif et pédagogique : les notes servent à comparer et discuter, pas à mesurer. Il ne remplace pas une analyse de cycle de vie complète.</div>
+<div class="card"><b>Objet étudié :</b> ${esc(S.objStudied)} &nbsp;|&nbsp; <b>Objet témoin :</b> ${esc(S.objWitness)} <a href="#/objets">(modifier)</a></div>
+<h2>Comment l'outil prend en compte les critères</h2><div class="card">
+<p><b>Critère = « quoi »</b> (carbone, biodiversité, emploi…). <b>Phase = « quand »</b> (extraction, construction, exploitation…). Le transport ou les infrastructures ne sont pas des critères mais des <i>sources</i> d'impact : on les lit dans les phases.</p>
+<ol><li>Pour chaque critère, on note <b>chaque phase</b> de 0 à 10, pour les deux objets (les sous-critères guident la note).</li>
+<li>La valeur d'un critère = moyenne de ses phases. La valeur d'une phase = moyenne des critères « impact ».</li>
+<li>Aucun score global : on compare critère par critère et phase par phase. Deux totaux égaux (A=6, B=6) peuvent cacher un déplacement entre phases ; l'outil le signale.</li>
+<li>Les <b>transferts</b> entre critères et entre phases sont proposés automatiquement, puis à justifier.</li></ol>
+<p class="small">Polarité : « impact » = plus la note est haute, pire c'est. « bénéfice » (ex. emploi) = plus c'est haut, mieux c'est. Les couleurs en tiennent compte.</p></div>
+<h2>Critères</h2><div class="grid2">${S.criteria.map(c=>`<div class="card"><b>${esc(c.name)}</b><span class="tag ${c.type}">${c.type==="env"?"Environnemental":"Social"}</span>${c.polarity==="benefit"?'<span class="tag">Bénéfice</span>':""}${c.enabled?"":'<span class="tag">Désactivé</span>'}<p class="small">${esc(c.desc)}</p></div>`).join("")}</div>`}
+function objets(){return`<h1>Objets comparés</h1><p class="lead">Nommer la solution étudiée et le témoin</p><div class="card grid2">
+<div><label class="small">Objet étudié</label><input type="text" value="${esc(S.objStudied)}" onchange="S.objStudied=this.value;save()"></div>
+<div><label class="small">Objet témoin</label><input type="text" value="${esc(S.objWitness)}" onchange="S.objWitness=this.value;save()"></div></div>`}
+/* ---------- page critère ---------- */
+const sl=(c,p,f,v)=>`<div class="scale"><input type="range" min="0" max="10" value="${v}" oninput="updCell('${c}','${p}','${f}',this.value)"><span class="val" id="v_${c}_${p}_${f}">${v}</span></div>`;
+function critPage(id){const c=crit(id);if(!c)return"<p>Critère introuvable.</p>";const ben=c.polarity==="benefit";
+ return`<h1>${esc(c.name)}<span class="tag ${c.type}">${c.type==="env"?"Environnemental":"Social"}</span></h1><p class="lead">${esc(c.desc)}</p>
+<div class="card"><b>Points d'attention :</b> ${c.sub.map(esc).join(" · ")||"—"}<p class="small">Échelle : 0 = ${ben?"bénéfice nul":"impact faible"} · 10 = ${ben?"bénéfice très fort":"impact très élevé"}. Écart : <span class="pos">+ = plus défavorable</span>, <span class="neg">− = plus favorable</span> que le témoin.</p></div>
+<div class="card"><div class="mrow mh"><div>Phase</div><div>${esc(S.objStudied)}</div><div>${esc(S.objWitness)}</div><div>Écart</div><div>Commentaire</div></div>
+${S.phases.map(p=>{const k=cell(c,p.id);return`<div class="mrow"><div><b>${esc(p.name)}</b></div><div>${sl(c.id,p.id,"s",k.s)}</div><div>${sl(c.id,p.id,"t",k.t)}</div><div id="d_${c.id}_${p.id}"></div>
+<input type="text" placeholder="Pourquoi cette note ?" value="${esc(k.note)}" onchange="cell(crit('${c.id}'),'${p.id}').note=this.value;save()"></div>`}).join("")}
+<div class="sum" id="sum_${c.id}"></div></div>
+<div class="chartbox"><div class="cb"><canvas id="chOne"></canvas></div></div>
+<label class="small">Justification / source</label><textarea onchange="crit('${c.id}').justification=this.value;save()">${esc(c.justification)}</textarea>
+<label class="small">Niveau de confiance</label><select onchange="crit('${c.id}').confiance=this.value;save()">${["Faible","Moyen","Élevé"].map(o=>`<option ${c.confiance===o?"selected":""}>${o}</option>`).join("")}</select>
+${(c.justification||"").includes("Exemple pédagogique")?'<div class="warn">Exemple pédagogique — à remplacer par vos propres données.</div>':""}
+<h2>Transferts liés à ce critère</h2><b>Entre critères</b>${ctTable(c.id)}<div class="bar"><button class="g" onclick="addCT('${c.id}')">+ Transfert depuis ce critère</button></div>
+<b>Entre phases (pour ce critère)</b>${ptTable(c.id)}<div class="bar"><button class="g" onclick="addPT('${c.id}')">+ Transfert entre phases</button></div>`}
+function refresh(cid,pid){const c=crit(cid);if(pid){const d=charge(c,pid),e=document.getElementById(`d_${cid}_${pid}`);if(e)e.innerHTML=`<span class="${cls(d)}">${fmt(d)}</span>`}
+ const ms=mean(c,"s"),mt=mean(c,"t"),st=status(c),w=cumulWarn(c),e=document.getElementById("sum_"+cid);
+ if(e)e.innerHTML=`Moyenne : <b>${r1(ms)}</b> (${esc(S.objStudied)}) · <b>${r1(mt)}</b> (${esc(S.objWitness)}) · écart <b class="${st==="worse"?"pos":st==="better"?"neg":"neu"}">${fmt(sg(c)*(ms-mt))}</b><br><span class="small">${st==="same"?"Valeur proche du témoin.":st==="worse"?"Plus défavorable que le témoin sur ce critère.":"Plus favorable que le témoin sur ce critère."}</span>${w?`<div class="warn">${esc(w)}</div>`:""}`}
+function updCell(cid,pid,f,v){const c=crit(cid);cell(c,pid)[f]=Number(v);document.getElementById(`v_${cid}_${pid}_${f}`).textContent=v;save();refresh(cid,pid);drawOne(c)}
+/* ---------- tables de transferts (listes déroulantes, pas de prompt) ---------- */
+const co=s=>S.criteria.map(c=>`<option value="${c.id}" ${c.id===s?"selected":""}>${esc(c.name)}</option>`).join(""),po=s=>S.phases.map(p=>`<option value="${p.id}" ${p.id===s?"selected":""}>${esc(p.name)}</option>`).join("");
+function ctTable(f){const r=S.critTransfers.map((t,i)=>[t,i]).filter(([t])=>!f||t.from===f||t.to===f);if(!r.length)return'<p class="small">Aucun transfert renseigné.</p>';
+ return`<table><tr><th>Critère qui s'améliore (source)</th><th>Critère qui se dégrade (cible)</th><th>Justification</th><th></th></tr>${r.map(([t,i])=>`<tr><td><select onchange="S.critTransfers[${i}].from=this.value;save()">${co(t.from)}</select></td><td><select onchange="S.critTransfers[${i}].to=this.value;save()">${co(t.to)}</select></td><td><textarea onchange="S.critTransfers[${i}].note=this.value;save()">${esc(t.note)}</textarea></td><td><button class="d" onclick="S.critTransfers.splice(${i},1);save();route()">Suppr.</button></td></tr>`).join("")}</table>`}
+function ptTable(f){const r=S.phaseTransfers.map((t,i)=>[t,i]).filter(([t])=>!f||t.critere===f);if(!r.length)return'<p class="small">Aucun transfert renseigné.</p>';
+ return`<table><tr><th>Phase allégée</th><th>Phase alourdie</th><th>Critère</th><th>Commentaire</th><th></th></tr>${r.map(([t,i])=>`<tr><td><select onchange="S.phaseTransfers[${i}].from=this.value;save()">${po(t.from)}</select></td><td><select onchange="S.phaseTransfers[${i}].to=this.value;save()">${po(t.to)}</select></td><td><select onchange="S.phaseTransfers[${i}].critere=this.value;save()">${co(t.critere)}</select></td><td><textarea onchange="S.phaseTransfers[${i}].note=this.value;save()">${esc(t.note)}</textarea></td><td><button class="d" onclick="S.phaseTransfers.splice(${i},1);save();route()">Suppr.</button></td></tr>`).join("")}</table>`}
+function addCT(f,t,n){const to=t||(S.criteria.find(c=>c.id!==f)||{}).id;if(!f||!to)return;if(S.critTransfers.some(x=>x.from===f&&x.to===to))return;S.critTransfers.push({from:f,to,note:n||""});save();route()}
+function addPT(c,f,t){f=f||(S.phases[0]||{}).id;t=t||(S.phases[1]||S.phases[0]||{}).id;if(!f||!t)return;if(S.phaseTransfers.some(x=>x.from===f&&x.to===t&&x.critere===c))return;S.phaseTransfers.push({from:f,to:t,critere:c,note:""});save();route()}
+/* ---------- phases ---------- */
+function phasesPage(){return`<h1>Phases du cycle de vie</h1><p class="lead">Les phases décrivent « quand » l'impact survient ; les notes se saisissent dans chaque critère.</p>
+<div class="bar"><input type="text" id="np" placeholder="Nom de la nouvelle phase"><button onclick="addPhase()">+ Ajouter une phase</button><button class="g" onclick="if(confirm('Restaurer les phases par défaut ?')){S.phases=JSON.parse(JSON.stringify(DEF_PHASES));save();route()}">Phases par défaut</button></div>
+${S.phases.map((p,i)=>`<div class="card"><div class="bar"><input type="text" value="${esc(p.name)}" style="font-weight:600;width:50%" onchange="S.phases[${i}].name=this.value;save()">
+<button class="g" ${i?"":"disabled"} onclick="mv(S.phases,${i},-1)">↑</button><button class="g" ${i<S.phases.length-1?"":"disabled"} onclick="mv(S.phases,${i},1)">↓</button><button class="d" onclick="delPhase(${i})">Suppr.</button></div>
+<textarea onchange="S.phases[${i}].desc=this.value;save()">${esc(p.desc)}</textarea>
+<table style="margin-top:8px"><tr><th>Critère</th><th>${esc(S.objStudied)}</th><th>${esc(S.objWitness)}</th><th>Écart</th></tr>${act().map(c=>{const k=cell(c,p.id),d=charge(c,p.id);return`<tr><td>${esc(c.name)}</td><td>${k.s}</td><td>${k.t}</td><td class="${cls(d)}">${fmt(d)}</td></tr>`}).join("")}</table></div>`).join("")}
+<h2>Transferts entre phases</h2>${ptTable(null)}<div class="bar"><button class="g" onclick="addPT((act()[0]||{}).id)">+ Ajouter un transfert</button></div>`}
+function addPhase(){const n=document.getElementById("np").value.trim();if(!n)return;S.phases.push({id:"p"+Date.now(),name:n,desc:""});save();route()}
+function delPhase(i){if(!confirm("Supprimer cette phase ?"))return;const id=S.phases[i].id;S.phases.splice(i,1);S.phaseTransfers=S.phaseTransfers.filter(t=>t.from!==id&&t.to!==id);S.criteria.forEach(c=>c.cells&&delete c.cells[id]);save();route()}
+const mv=(a,i,d)=>{const j=i+d;if(j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];save();route()};
+/* ---------- paramètres des critères ---------- */
+function params(){return`<h1>Critères</h1><p class="lead">Un critère est un type d'impact. Ne pas y mettre une phase du cycle de vie (transport, construction, fin de vie…) : elles sont gérées à part.</p>
+<div class="bar"><input type="text" id="nc" placeholder="Nom du nouveau critère"><button onclick="addCrit()">+ Ajouter un critère</button><button class="g" onclick="if(confirm('Restaurer les critères par défaut ?')){S.criteria=JSON.parse(JSON.stringify(DEF_CRIT));save();route()}">Critères par défaut</button></div>
+${S.criteria.map((c,i)=>`<div class="card"><input type="text" value="${esc(c.name)}" style="font-weight:600;margin-bottom:6px" onchange="S.criteria[${i}].name=this.value;save();nav()">
+<textarea onchange="S.criteria[${i}].desc=this.value;save()">${esc(c.desc)}</textarea>
+<label class="small">Points d'attention (un par ligne)</label><textarea onchange="S.criteria[${i}].sub=this.value.split(/\\n/).filter(x=>x.trim());save()">${esc(c.sub.join("\n"))}</textarea>
+<div class="bar"><select style="width:auto" onchange="S.criteria[${i}].type=this.value;save()"><option value="env" ${c.type==="env"?"selected":""}>Environnemental</option><option value="soc" ${c.type==="soc"?"selected":""}>Social</option></select>
+<select style="width:auto" onchange="S.criteria[${i}].polarity=this.value;save()"><option value="impact" ${c.polarity!=="benefit"?"selected":""}>Impact (haut = pire)</option><option value="benefit" ${c.polarity==="benefit"?"selected":""}>Bénéfice (haut = mieux)</option></select>
+<label><input type="checkbox" ${c.enabled?"checked":""} onchange="S.criteria[${i}].enabled=this.checked;save();nav()"> Activé</label>
+<button class="g" onclick="mv(S.criteria,${i},-1)">↑</button><button class="g" onclick="mv(S.criteria,${i},1)">↓</button><button class="d" onclick="delCrit(${i})">Supprimer</button></div></div>`).join("")}`}
+function addCrit(){const n=document.getElementById("nc").value.trim();if(!n)return;S.criteria.push({id:"c"+Date.now(),name:n,type:"env",polarity:"impact",enabled:true,desc:"",sub:[],confiance:"Faible",justification:"",cells:{}});save();route()}
+function delCrit(i){if(!confirm("Supprimer ce critère ?"))return;const id=S.criteria[i].id;S.criteria.splice(i,1);S.critTransfers=S.critTransfers.filter(t=>t.from!==id&&t.to!==id);S.phaseTransfers=S.phaseTransfers.filter(t=>t.critere!==id);save();route()}
+/* ---------- tableau de bord ---------- */
+function dash(){setTimeout(drawDash,0);const L=act(),B=L.filter(c=>status(c)==="better"),W=L.filter(c=>status(c)==="worse"),E=L.filter(c=>status(c)==="same");
+ const ca=crit("carbone"),cs=ca&&ca.enabled?status(ca):null;
+ const focus=ca&&ca.enabled?`<div class="card"><b>Focus carbone</b> : ${esc(S.objStudied)} ${r1(mean(ca,"s"))}/10 contre ${r1(mean(ca,"t"))}/10 pour ${esc(S.objWitness)} (${cs==="better"?"favorable":cs==="worse"?"défavorable":"proche"}).
+ ${cs==="better"&&W.length?`<div class="warn">Le carbone s'améliore, mais ${W.length} critère(s) se dégradent (${W.map(c=>esc(c.name)).join(", ")}) : ne pas conclure sur le seul carbone.</div>`:""}</div>`:"";
+ const hints=[];B.forEach(b=>W.forEach(w=>hints.push([b,w])));
+ const ph=L.map(c=>({c,h:phaseHints(c),w:cumulWarn(c)})).filter(x=>x.h.g.length&&x.h.r.length);
+ return`<h1>Analyse des résultats</h1><p class="lead">Aucun score global : les critères restent séparés.</p>${focus}
+<div class="grid2"><div class="chartbox"><h3>Par critère (moyenne sur le cycle de vie)</h3><div class="cb"><canvas id="chC"></canvas></div></div>
+<div class="chartbox"><h3>Par phase (critères « impact »)</h3><div class="cb"><canvas id="chP"></canvas></div></div></div>
+<h2>Écarts critère × phase</h2><div class="card" style="overflow-x:auto"><table><tr><th></th>${S.phases.map(p=>`<th>${esc(p.name)}</th>`).join("")}<th>Moyenne</th></tr>
+${L.map(c=>`<tr><th>${esc(c.name)}</th>${S.phases.map(p=>{const d=charge(c,p.id);return`<td style="background:${d>=2?"#f3cfc8":d>=1?"#faebe8":d<=-2?"#cfe8d8":d<=-1?"#e8f4ec":"#fff"}">${fmt(d)}</td>`}).join("")}<td><b>${fmt(sg(c)*(mean(c,"s")-mean(c,"t")))}</b></td></tr>`).join("")}</table>
+<p class="small">Valeur = charge de ${esc(S.objStudied)} − charge du témoin. Rouge = plus défavorable, vert = plus favorable (la polarité est prise en compte).</p></div>
+<h2>Résumé</h2><div class="grid2"><div class="card"><b>Plus favorable que le témoin</b><ul>${B.map(c=>`<li>${esc(c.name)}</li>`).join("")||"<li class='small'>Aucun</li>"}</ul></div>
+<div class="card"><b>Plus défavorable que le témoin</b><ul>${W.map(c=>`<li>${esc(c.name)}</li>`).join("")||"<li class='small'>Aucun</li>"}</ul></div>
+<div class="card"><b>Proches du témoin</b><ul>${E.map(c=>`<li>${esc(c.name)}</li>`).join("")||"<li class='small'>Aucun</li>"}</ul></div></div>
+<h2>Transferts possibles détectés</h2><div class="card"><b>Entre critères</b> <span class="small">(un critère s'améliore pendant qu'un autre se dégrade)</span>
+${hints.length?`<table>${hints.slice(0,8).map(([b,w])=>{const ok=S.critTransfers.some(t=>t.from===b.id&&t.to===w.id);return`<tr><td>${esc(b.name)} → ${esc(w.name)}</td><td style="width:120px">${ok?"✔ documenté":`<button class="g" onclick="addCT('${b.id}','${w.id}')">Documenter</button>`}</td></tr>`}).join("")}</table>`:'<p class="small">Aucun détecté.</p>'}
+<b>Entre phases</b> <span class="small">(pour un même critère, une phase s'allège de ≥2 pts pendant qu'une autre s'alourdit de ≥2 pts)</span>
+${ph.length?`<table>${ph.map(x=>`<tr><td><b>${esc(x.c.name)}</b> : ${x.h.g.map(p=>esc(p.name)).join(", ")} → ${x.h.r.map(p=>esc(p.name)).join(", ")}${x.w?`<br><span class="small">${esc(x.w)}</span>`:""}</td><td style="width:120px"><button class="g" onclick="x2pt('${x.c.id}')">Documenter</button></td></tr>`).join("")}</table>`:'<p class="small">Aucun détecté.</p>'}</div>
+<h2>Transferts documentés</h2><div class="card"><b>Entre critères</b>${ctTable(null)}</div><div class="card"><b>Entre phases</b>${ptTable(null)}</div>
+<div class="bar"><button onclick="exportCSV()">Exporter (CSV)</button><button class="g" onclick="window.print()">Imprimer</button></div>
+<div class="notice"><b>À retenir :</b> une solution peut réduire un impact tout en en augmentant un autre (transfert entre critères), ou le déplacer d'une phase à une autre (transfert entre phases). L'outil les rend visibles pour pouvoir les argumenter.</div>`}
+function x2pt(cid){const h=phaseHints(crit(cid));h.g.forEach(g=>h.r.forEach(r=>{if(!S.phaseTransfers.some(x=>x.from===g.id&&x.to===r.id&&x.critere===cid))S.phaseTransfers.push({from:g.id,to:r.id,critere:cid,note:""})}));save();route()}
+/* ---------- graphiques ---------- */
+let ch={};const kill=()=>{Object.values(ch).forEach(x=>x&&x.destroy());ch={}};
+function bars(id,labels,a,b){const e=document.getElementById(id);if(!e||typeof Chart==="undefined")return;if(ch[id])ch[id].destroy();
+ ch[id]=new Chart(e,{type:"bar",data:{labels,datasets:[{label:S.objStudied,data:a,backgroundColor:"#12233d"},{label:S.objWitness,data:b,backgroundColor:"#9aa4b2"}]},options:{maintainAspectRatio:false,scales:{y:{min:0,max:10}},plugins:{legend:{position:"bottom"}}}})}
+function drawOne(c){bars("chOne",S.phases.map(p=>p.name),S.phases.map(p=>cell(c,p.id).s),S.phases.map(p=>cell(c,p.id).t))}
+function drawDash(){const L=act();bars("chC",L.map(c=>c.name),L.map(c=>r1(mean(c,"s"))),L.map(c=>r1(mean(c,"t"))));bars("chP",S.phases.map(p=>p.name),S.phases.map(p=>r1(phMean(p.id,"s"))),S.phases.map(p=>r1(phMean(p.id,"t"))))}
+function exportCSV(){const R=[["Critère","Polarité","Phase","Étudié","Témoin","Écart (charge)","Commentaire"]];
+ act().forEach(c=>S.phases.forEach(p=>{const k=cell(c,p.id);R.push([c.name,c.polarity,p.name,k.s,k.t,charge(c,p.id),k.note])}));R.push([]);R.push(["Transfert critères","Source","Cible","Justification"]);
+ S.critTransfers.forEach(t=>R.push(["",cn(t.from),cn(t.to),t.note]));R.push([]);R.push(["Transfert phases","Phase allégée","Phase alourdie","Critère","Commentaire"]);
+ S.phaseTransfers.forEach(t=>R.push(["",pn(t.from),pn(t.to),cn(t.critere),t.note]));
+ const csv=R.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(";")).join("\n"),a=document.createElement("a");
+ a.href=URL.createObjectURL(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"}));a.download="impactrans_export.csv";a.click()}
+/* ---------- routeur ---------- */
+function route(){kill();const h=location.hash||"#/home";let o;
+ if(h==="#/objets")o=objets();else if(h.startsWith("#/crit/"))o=critPage(h.split("/")[2]);else if(h==="#/phases")o=phasesPage();else if(h==="#/dashboard")o=dash();else if(h==="#/params")o=params();else o=home();
+ document.getElementById("content").innerHTML=o;nav();
+ if(h.startsWith("#/crit/")){const c=crit(h.split("/")[2]);if(c){S.phases.forEach(p=>refresh(c.id,p.id));drawOne(c)}}}
+addEventListener("hashchange",route);route();
+</script></body></html>
